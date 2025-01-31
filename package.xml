@@ -13,6 +13,7 @@
   <depend>rclcpp</depend>
   <depend>libignition-msgs8-dev</depend>
   <depend>libignition-transport11-core-dev</depend>
+  <depend>rviz_gazebo_bridge</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
