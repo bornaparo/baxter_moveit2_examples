@@ -14,6 +14,7 @@
   <depend>libignition-msgs8-dev</depend>
   <depend>libignition-transport11-core-dev</depend>
   <depend>rviz_gazebo_bridge</depend>
+  <depend>baxter_moveit2_adapter</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

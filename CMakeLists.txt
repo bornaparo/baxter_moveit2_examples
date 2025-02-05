@@ -25,9 +25,10 @@ find_package(geometric_shapes REQUIRED)
 find_package(control_msgs REQUIRED)
 
 find_package(rviz_gazebo_bridge REQUIRED)
+find_package(baxter_moveit2_adapter REQUIRED)
 
 add_executable(baxter_moveit2_examples src/baxter_moveit2_examples.cpp)
-ament_target_dependencies(baxter_moveit2_examples moveit_ros_planning_interface ignition-msgs8 ignition-transport11 rclcpp moveit_msgs tf2_geometry_msgs geometric_shapes control_msgs rviz_gazebo_bridge)
+ament_target_dependencies(baxter_moveit2_examples moveit_ros_planning_interface ignition-msgs8 ignition-transport11 rclcpp moveit_msgs tf2_geometry_msgs geometric_shapes control_msgs rviz_gazebo_bridge baxter_moveit2_adapter)
 
 install(TARGETS 
   baxter_moveit2_examples

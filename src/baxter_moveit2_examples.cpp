@@ -47,6 +47,8 @@
 
 #include "rviz_gazebo_bridge/rviz_gazebo_bridge.h"
 
+#include "baxter_moveit2_adapter/baxter_moveit2_adapter.h"
+
 class BaxterMoveit2Examples
 {
 public:
@@ -73,6 +75,7 @@ private:
     rclcpp::Publisher<control_msgs::action::FollowJointTrajectory::Goal>::SharedPtr left_arm_goal_publisher; //for controlling real baxter
     rclcpp::Publisher<control_msgs::action::FollowJointTrajectory::Goal>::SharedPtr right_arm_goal_publisher; //for controlling real baxter
     std::shared_ptr<RVizGazeboBridge> rviz_gazebo_bridge;
+    std::shared_ptr<BaxterMoveit2Adapter> baxter_moveit2_adapter;
 };
 
 static rclcpp::Logger LOGGER = rclcpp::get_logger("baxter_moveit2_examples_node");
@@ -83,12 +86,10 @@ BaxterMoveit2Examples::BaxterMoveit2Examples(const rclcpp::NodeOptions& options,
                                                                         move_group_interface_left_arm(this->node_, "left_arm"), //group is from .srdf-a
                                                                     move_group_interface_right_arm(this->node_, "right_arm"),
                                                                     move_group_interface_both_arms(this->node_, "both_arms"),
-                                                                    rviz_gazebo_bridge(std::make_shared<RVizGazeboBridge>(robot_name))
+                                                                    rviz_gazebo_bridge(std::make_shared<RVizGazeboBridge>(robot_name)),
+                                                                    baxter_moveit2_adapter(std::make_shared<BaxterMoveit2Adapter>(node_))
                                                                     
 {
-    this->left_arm_goal_publisher = this->node_->create_publisher<control_msgs::action::FollowJointTrajectory::Goal>("/robot/limb/left/follow_joint_trajectory_bridge", 10);
-    this->right_arm_goal_publisher = this->node_->create_publisher<control_msgs::action::FollowJointTrajectory::Goal>("/robot/limb/right/follow_joint_trajectory_bridge", 10);
-
 }
 
 void BaxterMoveit2Examples::rviz2gazebo_example() //for creating collision objects, loading them from planning scene and spawning them into gazebo
@@ -119,70 +120,12 @@ void BaxterMoveit2Examples::sleep()
     RCLCPP_INFO_STREAM(LOGGER, "Resuming");
 }
 
-std::tuple<control_msgs::action::FollowJointTrajectory::Goal, control_msgs::action::FollowJointTrajectory::Goal>
-construct_goals(const moveit_msgs::msg::RobotTrajectory::_joint_trajectory_type& traj)
-{
-    auto goal_left = control_msgs::action::FollowJointTrajectory::Goal();
-    auto goal_right = control_msgs::action::FollowJointTrajectory::Goal();
-
-    //header
-    goal_left.trajectory.header = goal_right.trajectory.header = traj.header;
-
-    //joint_names
-    std::copy(traj.joint_names.begin(), traj.joint_names.begin() + 7, std::back_inserter(goal_left.trajectory.joint_names)); 
-    std::copy(traj.joint_names.begin() + 7, traj.joint_names.end(), std::back_inserter(goal_right.trajectory.joint_names)); 
-
-    //points
-    for (auto &point : traj.points)
-    {
-        //left_point
-        auto left_point = trajectory_msgs::msg::JointTrajectoryPoint();
-        //right point
-        auto right_point = trajectory_msgs::msg::JointTrajectoryPoint();
-        
-        if (point.positions.size() == 14)
-        {
-            std::copy(point.positions.begin(), point.positions.begin() + 7, std::back_inserter(left_point.positions));
-            std::copy(point.positions.begin() + 7, point.positions.end(), std::back_inserter(right_point.positions));
-        }
-
-        if (point.velocities.size() == 14)
-        {
-            std::copy(point.velocities.begin(), point.velocities.begin() + 7, std::back_inserter(left_point.velocities));
-            std::copy(point.velocities.begin() + 7, point.velocities.end(), std::back_inserter(right_point.velocities));
-        }
-
-        if (point.accelerations.size() == 14)
-        {
-            std::copy(point.accelerations.begin(), point.accelerations.begin() + 7, std::back_inserter(left_point.accelerations));
-            std::copy(point.accelerations.begin() + 7, point.accelerations.end(), std::back_inserter(right_point.accelerations));
-        }
-
-        if (point.effort.size() == 14)
-        {
-            std::copy(point.effort.begin(), point.effort.begin() + 7, std::back_inserter(left_point.effort)); 
-            std::copy(point.effort.begin() + 7, point.effort.end(), std::back_inserter(right_point.effort));
-        }
-
-        left_point.time_from_start = point.time_from_start;
-        goal_left.trajectory.points.push_back(left_point);
-
-        right_point.time_from_start = point.time_from_start;
-        goal_right.trajectory.points.push_back(right_point);
-    }
-    //goal time tolerance
-    goal_left.goal_time_tolerance = goal_right.goal_time_tolerance = rclcpp::Duration::from_seconds(0.1);
-
-    return {goal_left, goal_right};
-
-};
-
 void BaxterMoveit2Examples::move_part(moveit::planning_interface::MoveGroupInterface& mgi, bool async_execute = false)
 {
     mgi.setMaxAccelerationScalingFactor(0.8); 
     mgi.setMaxVelocityScalingFactor(0.8); 
-    mgi.setNumPlanningAttempts(10);
-    mgi.setPlanningTime(10);
+    mgi.setNumPlanningAttempts(1); //ovo ti je koliko ti valid plannova mora pronac, ako mora pronac n planova a on je pronasao m gdje je m < n on ce rec da planiranje nije uspjelo (nisam provjerio pa nez 100%)
+    mgi.setPlanningTime(30);
     mgi.setGoalOrientationTolerance(0.01);
 
     auto const [success, plan] = [&mgi]()
@@ -196,59 +139,21 @@ void BaxterMoveit2Examples::move_part(moveit::planning_interface::MoveGroupInter
     if (success == moveit::core::MoveItErrorCode::SUCCESS)
     {
         RCLCPP_INFO(LOGGER, "[MOJE] BaxterMoveit2Examples::move_part(), group that this move group interface operates on: %s", mgi.getName().c_str());
-        auto mgi_name = mgi.getName();
-        if (mgi_name.find("both") != std::string::npos) //for both arms
-        {
-            auto [goal_left, goal_right] = construct_goals(plan.trajectory_.joint_trajectory);
 
-            auto left_pub_thread = std::make_unique<std::thread>(
-                [this, goal_left]()
-                {
-                    this->left_arm_goal_publisher->publish(goal_left);
-                    RCLCPP_INFO(LOGGER, "[MOJE] BaxterMoveit2Examples::move_part(), goal message published to topic: %s", this->left_arm_goal_publisher->get_topic_name());
-                }
-            );
-
-            auto right_pub_thread = std::make_unique<std::thread>(
-                [this, goal_right]()
-                {
-                    this->right_arm_goal_publisher->publish(goal_right);
-                    RCLCPP_INFO(LOGGER, "[MOJE] BaxterMoveit2Examples::move_part(), goal message published to topic: %s", this->right_arm_goal_publisher->get_topic_name());
-                }
-            );
-
-            left_pub_thread->detach();
-            right_pub_thread->detach();
-        } 
-        else
-        {
-            rclcpp::Publisher<control_msgs::action::FollowJointTrajectory::Goal>::SharedPtr pub;
-            if (mgi_name.find("left") != std::string::npos)
+        const std::string mgi_name = mgi.getName();
+        auto real_baxter_thread = std::make_unique<std::thread>(
+            [this, mgi_name, plan]()
             {
-                pub = this->left_arm_goal_publisher;
+                this->baxter_moveit2_adapter->send_to_real_baxter(mgi_name, plan.trajectory_.joint_trajectory);
             }
-            else
-            {
-                pub = this->right_arm_goal_publisher;
-            }
-            //publish
-            auto pub_thread = std::make_unique<std::thread>( 
-            [plan, &pub]()
-                    {
-                        auto goal = control_msgs::action::FollowJointTrajectory::Goal();
-                        goal.trajectory = plan.trajectory_.joint_trajectory;
-                        goal.goal_time_tolerance = rclcpp::Duration::from_seconds(0.1);
-                        pub->publish(goal);
-                        RCLCPP_INFO(LOGGER, "[MOJE] BaxterMoveit2Examples::move_part(), goal message published to topic: %s", pub->get_topic_name());
-                    }
-                );
-            pub_thread->detach();
-        }
+        );
 
         if (async_execute)
-            mgi.asyncExecute(plan);
+            mgi.asyncExecute(plan); 
         else
             mgi.execute(plan);
+
+        real_baxter_thread->join();
     } 
     else
     {
@@ -260,7 +165,7 @@ void BaxterMoveit2Examples::move_part(moveit::planning_interface::MoveGroupInter
 void BaxterMoveit2Examples::move_left_arm()
 {
     this->move_group_interface_left_arm.setPositionTarget(0.8, 0.86, 0.8);
-    this->move_group_interface_left_arm.setPlannerId("RRTConnectkConfigDefault");
+    // this->move_group_interface_left_arm.setPlannerId("RRTConnectkConfigDefault");
     
     this->move_part(this->move_group_interface_left_arm);
     this->sleep();
@@ -442,7 +347,7 @@ int main(int argc, char** argv)
     /* EXAMPLES */
 
     //ex1: load from rviz to gazebo, move left arm from one side of the "separator" to another
-    node->run(); 
+    node->run();  //sometimes can fail to find path, i think it happens if the /joint_states is not published/received fast enough
     
     //ex2: same as ex1 just without moving the arm
     // node->rviz2gazebo_example();

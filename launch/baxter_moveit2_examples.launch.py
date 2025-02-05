@@ -45,6 +45,8 @@ def generate_launch_description():
                 {
                     "use_sim_time": True,
                 }
-            ]
+            ],
+            # prefix=['gdb -ex run --args'],
+            # output="screen",
         )
     ])
