@@ -347,7 +347,7 @@ int main(int argc, char** argv)
     /* EXAMPLES */
 
     //ex1: load from rviz to gazebo, move left arm from one side of the "separator" to another
-    node->run();  //sometimes can fail to find path, i think it happens if the /joint_states is not published/received fast enough
+    //node->run();  //sometimes can fail to find path, i think it happens if the /joint_states is not published/received fast enough
     
     //ex2: same as ex1 just without moving the arm
     // node->rviz2gazebo_example();
@@ -358,7 +358,7 @@ int main(int argc, char** argv)
     //ex4-6: moving the arm(s), can be combined with loading obstacles to rviz from gazebo and vice versa
     // node->move_left_arm(); //sometimes fails when used with gazebo
     // node->move_both_arms();
-    // node->move_both_arms2();
+    node->move_both_arms2();
     
     //-----//
     spin_thread->join();
